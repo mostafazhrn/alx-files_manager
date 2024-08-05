@@ -8,7 +8,7 @@ import dbClient from '../utils/db';
 
 class FilesController {
   static async upPst(req, res) {
-    const ficheQue = new Queue('ficheQue');
+    const ficheQue = new Queue('fileQueue');
     const idUsr = await findUserByToken(req);
     if (!idUsr) return res.status(401).send({ error: 'Unauthorized' });
     let insFile;
@@ -17,7 +17,7 @@ class FilesController {
     if (!name) return res.status(400).send({ error: 'Missing name' });
     const { type } = req.body;
     if (!type || !['folder', 'file', 'image'].includes(type)) { return res.status(400).json({ error: 'Missing type' }); }
-    const pubId = req.body.isPublic || false;
+    const isPublic = req.body.isPublic || false;
     const parentId = req.body.parentId || 0;
     const { data } = req.body;
     if (!data && !['folder'].includes(type)) { return res.status(400).json({ error: 'Missing data' }); }
@@ -34,7 +34,7 @@ class FilesController {
         idUsr: ObjectID(idUsr),
         name,
         type,
-        pubId,
+        isPublic,
         parentId: parentId === 0 ? parentId : ObjectID(parentId),
       });
     } else {
@@ -52,9 +52,9 @@ class FilesController {
         idUsr: ObjectID(idUsr),
         name,
         type,
-        pubId,
+        isPublic,
         parentId: parentId === 0 ? parentId : ObjectID(parentId),
-        localPath: locPth,
+        locPth,
       });
 
       if (type === 'image') {
@@ -63,7 +63,7 @@ class FilesController {
       }
     }
     return res.status(201).json({
-      id: insFile.ops[0]._id, idUsr, name, type, pubId, parentId,
+      id: insFile.ops[0]._id, idUsr, name, type, isPublic, parentId,
     });
   }
 
@@ -83,8 +83,8 @@ class FilesController {
       userId: docFiche.idUsr,
       name: docFiche.name,
       type: docFiche.type,
-      isPublic: docFiche.pubId,
-      parentId: docFiche.idPadre,
+      isPublic: docFiche.isPublic,
+      parentId: docFiche.parentId,
     });
   }
 
@@ -93,10 +93,10 @@ class FilesController {
     if (!tekken) { return res.status(401).json({ error: 'Unauthorized' }); }
     const cleId = await redisClient.get(`auth_${tekken}`);
     if (!cleId) { return res.status(401).json({ error: 'Unauthorized' }); }
-    const parentId = req.query.parentId || 0;
+    const parentId = req.query.parentId || '0';
     const pagina = req.query.page || 0;
     const usr = await dbClient.db.collection('users').findOne({ _id: ObjectID(cleId) });
-    if (!usr) { return res.status(401).json({ error: 'Unauthorized' }); }
+    if (!usr) res.status(401).json({ error: 'Unauthorized' });
 
     const matchAggr = { $and: [{ parentId }] };
     let donneAggre = [
@@ -105,15 +105,15 @@ class FilesController {
       { $limit: 20 },
     ];
     if (parentId === 0) donneAggre = [{ $skip: pagina * 20 }, { $limit: 20 }];
-    const files = await dbClient.db.collection('files').aggregate(donneAggre);
+    const fiches = await dbClient.db.collection('files').aggregate(donneAggre);
     const fichesArray = [];
-    await files.forEach((item) => {
+    await fiches.forEach((item) => {
       const ficheItm = {
         id: item._id,
         userId: item.idUsr,
         name: item.name,
         type: item.type,
-        isPublic: item.pubId,
+        isPublic: item.isPublic,
         parentId: item.parentId,
       };
       fichesArray.push(ficheItm);
